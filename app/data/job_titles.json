@@ -1,0 +1,9 @@
+{
+    "Software Engineer": ["Software Developer", "Software Engineer", "Software Programmer", "Backend Engineer"],
+    "Data Scientist": ["AI Engineer", "Machine Learning Engineer", "Data Scientist", "Deep Learning Engineer"],
+    "DevOps Engineer": ["Cloud Engineer", "DevOps Engineer", "SRE", "Platform Engineer"],
+    "Cybersecurity Analyst": ["Security Engineer", "Cybersecurity Analyst", "Penetration Tester"],
+    "Frontend Developer": ["Frontend Developer", "UI Developer", "Web Developer"],
+    "Backend Developer": ["Backend Engineer", "Server-Side Developer", "API Engineer"],
+    "Project Manager": ["Project Manager", "Scrum Master", "Agile Coach"]
+}
