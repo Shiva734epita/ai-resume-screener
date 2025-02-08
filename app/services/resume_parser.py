@@ -2,153 +2,151 @@ import re
 import spacy
 import json
 import os
+from sklearn.feature_extraction.text import TfidfVectorizer
+import fitz 
+import numpy as np
 
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_lg")
+# Load skill and job title databases
+BASE_DIR = os.path.dirname(__file__)
+SKILLS_DB_PATH = os.path.join(BASE_DIR, "../data/skills.json")
+JOB_TITLES_DB_PATH = os.path.join(BASE_DIR, "../data/job_titles.json")
 
-# Load skills and job titles from JSON
-SKILLS_DB_PATH = os.path.join(os.path.dirname(__file__), "../data/skills.json")
-JOB_TITLES_DB_PATH = os.path.join(os.path.dirname(__file__), "../data/job_titles.json")
+def load_json(filepath):
+    if os.path.exists(filepath):
+        with open(filepath, "r") as file:
+            return json.load(file)
+    return {}
 
-def load_skills():
-    """Loads skills dynamically from a JSON file"""
-    if not os.path.exists(SKILLS_DB_PATH):
-        return set()
+SKILL_DATABASE = load_json(SKILLS_DB_PATH)
+JOB_TITLE_MAPPING = load_json(JOB_TITLES_DB_PATH)
+
+with open("app/data/job_titles.json", "r") as f:
+    job_titles = json.load(f)
+
+# ✅ Fix case where job_titles is incorrectly loaded as a dictionary
+if isinstance(job_titles, dict):  
+    job_titles = list(job_titles.values())  
+
+# ✅ Ensure all job titles are strings (not lists or objects)
+job_titles = [str(title) for title in job_titles]  
+
+def extract_text_from_pdf(pdf_path):
+    """ Extracts raw text from a PDF file. """
+    doc = fitz.open(pdf_path)
+    full_text = ""
+
+    for page in doc:
+        full_text += page.get_text("text") + " "
+
+    return full_text.strip()
+
+def extract_name_ner(text):
+    """ Extracts the first valid PERSON entity using NER. """
+    nlp_doc = nlp(text)
+    person_names = [ent.text.strip() for ent in nlp_doc.ents if ent.label_ == "PERSON"]
+
+    if person_names:
+        return person_names[0]  # Return the first valid name found
+
+    return None  # Return None if no valid name is found
+
+def extract_name_regex(text):
+    """ Extracts the name using Regex if 'Name:' label is present. """
+    name_pattern = r"Name:\s*([A-Za-z\s]+)"
+    match = re.search(name_pattern, text)
+
+    return match.group(1).strip() if match else None  # Return None if no match
+
+def extract_name_top_lines(text):
+    """ Extracts the first valid text assuming it's a name. """
+    lines = text.split("\n")
     
-    with open(SKILLS_DB_PATH, "r") as file:
-        skills_data = json.load(file)
+    for line in lines:
+        words = line.strip().split()
+        if 2 <= len(words) <= 4:  # Likely a name (First + Last Name)
+            return line.strip()
+    
+    return None  # Return None if no valid name is found
 
-    skill_set = set()
-    for category, skills in skills_data.items():
-        skill_set.update(skills)
-    return skill_set
+def extract_name(pdf_path):
+    """ Hybrid method: Try Regex → NER → Top-Line Extraction. """
+    text = extract_text_from_pdf(pdf_path)
 
-def load_job_titles():
-    """Loads job titles dynamically from a JSON file"""
-    if not os.path.exists(JOB_TITLES_DB_PATH):
-        return {}
+    # Try regex first
+    name = extract_name_regex(text)
+    if name:
+        return name
 
-    with open(JOB_TITLES_DB_PATH, "r") as file:
-        return json.load(file)
+    # Try Named Entity Recognition (NER)
+    name = extract_name_ner(text)
+    if name:
+        return name
 
-# ✅ Initialize skill database and job title mapping
-SKILL_DATABASE = load_skills()
-JOB_TITLE_MAPPING = load_job_titles()
-
-def extract_name(resume_text):
-    """Extracts name from the resume while ensuring job roles are not attached."""
-    doc = nlp(resume_text)
-    person_entities = [ent.text.strip() for ent in doc.ents if ent.label_ == "PERSON"]
-
-    if not person_entities:
-        return "Unknown"
-
-    # Split name and job title if attached
-    full_person_entry = person_entities[0]
-    split_text = full_person_entry.split("\n")
-    actual_name = split_text[0].strip()
-
-    print(f"DEBUG: Extracted Name: {actual_name}")
-    return actual_name
+    # Try extracting from top lines as a fallback
+    name = extract_name_top_lines(text)
+    return name if name else "Name not found"
 
 def extract_email(resume_text):
-    """Extract email using regex"""
-    email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-    match = re.findall(email_pattern, resume_text)
-    return match[0].strip() if match else "Not found"
+    match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", resume_text)
+    return match.group(0) if match else "Unknown"
 
-def extract_phone(resume_text):
-    """Extract phone number using regex"""
-    phone_pattern = r"\(?\+?\d{1,3}\)?[-.\s]?\d{3}[-.\s]?\d{3,4}[-.\s]?\d{4}"
-    match = re.findall(phone_pattern, resume_text)
-    return match[0].strip() if match else "Not found"
+def extract_phone(text):
+    """Extract phone number from resume text"""
+    phone_pattern = re.compile(r'\+?\d[\d\s\-\(\)]{8,}')  # ✅ Supports multiple phone formats
+    match = phone_pattern.search(text)
+    return match.group() if match else "Unknown"
 
 def extract_skills(resume_text):
-    """Extract skills dynamically from the loaded skills database"""
-    doc = nlp(resume_text)
-    extracted_skills = set()
+    """Returns skills as a JSONB-compatible dictionary."""
+    found_skills = {}
+    for category, skills in SKILL_DATABASE.items():
+        found_skills[category] = [skill for skill in skills if skill.lower() in resume_text.lower()]
+    return found_skills  # ✅ Now structured as a JSON object
 
-    for token in doc:
-        if token.text in SKILL_DATABASE:
-            extracted_skills.add(token.text)
+vectorizer = TfidfVectorizer().fit(job_titles)
+job_vectors = vectorizer.transform(job_titles)
 
-    return list(extracted_skills) if extracted_skills else ["Not specified"]
+def extract_job_role(text):
+    """Uses AI-powered text similarity to detect job role"""
+    text_vector = vectorizer.transform([text])  # Convert resume text into numerical features
+    similarities = np.dot(job_vectors, text_vector.T).toarray().flatten()  # Compute similarity scores
 
-def normalize_job_role(job_role):
-    """Maps extracted job role to a standardized title using job_titles.json"""
-    job_role_cleaned = job_role.strip().lower()
+    if np.all(similarities == 0):  # ✅ Handle case where no job role is matched
+        return "Unknown"
 
-    for standard_title, variations in JOB_TITLE_MAPPING.items():
-        if job_role_cleaned in [v.lower() for v in variations]:
-            return standard_title
+    best_match_idx = int(np.argmax(similarities))  # ✅ Convert NumPy index to Python int
+    best_match = job_titles[best_match_idx]  # ✅ Get best-matching job role
+
+    if similarities[best_match_idx] > 0.2:  # ✅ Confidence threshold
+        return best_match  # ✅ Return as a clean string
+
+    return "Unknown" 
+
+def parse_resume(filepath):
+    """Extract structured information from resume text"""
     
-    return job_role if len(job_role.split()) > 1 else "Unknown"
+    resume_text = extract_text_from_pdf(filepath)  # ✅ Use new PDF extraction method
 
-def extract_job_role(resume_text):
-    """Extracts job role using structured section scanning and NLP keyword matching."""
-    doc = nlp(resume_text)
-    job_titles = []
+    print(f"DEBUG: Clean Resume Text:\n{resume_text[:1000]}")  # ✅ Print first 1000 characters
 
-    person_name = extract_name(resume_text)
-    JOB_KEYWORDS = ["Engineer", "Developer", "Analyst", "Consultant", "Manager",
-                    "Scientist", "Specialist", "Architect", "Lead", "Intern"]
-
-    EXPERIENCE_SECTIONS = ["Work Experience", "Professional Experience", "Employment History"]
-    PROJECT_SECTIONS = ["Projects", "Personal Projects", "Academic Projects"]
-
-    print("\n🔍 DEBUG: NLP Detected Entities:")
-    for ent in doc.ents:
-        print(f"Entity: {ent.text} | Label: {ent.label_}")
-
-    detected_role = None
-    for section in EXPERIENCE_SECTIONS + PROJECT_SECTIONS:
-        if section in resume_text:
-            extracted_section = resume_text.split(section, 1)[-1][:500]
-            print(f"DEBUG: Extracting Job Role from {section} section: {extracted_section}")
-
-            for word in extracted_section.split():
-                if word in JOB_KEYWORDS:
-                    detected_role = word
-                    break
-
-    if not detected_role:
-        past_roles = []
-        for ent in doc.ents:
-            if ent.label_ in ["ORG", "TITLE"] and any(word in ent.text.split() for word in JOB_KEYWORDS):
-                past_roles.append(ent.text.strip())
-
-        if past_roles:
-            past_roles = sorted(past_roles, key=lambda x: len(x.split()), reverse=True)
-            detected_role = past_roles[0]
-
-    detected_role = detected_role if detected_role else "Unknown"
-
-    if person_name in detected_role:
-        detected_role = detected_role.replace(person_name, "").strip()
-
-    if not detected_role.strip():
-        detected_role = "Unknown"
-
-    detected_role = normalize_job_role(detected_role)
-    print("DEBUG: Final Job Role After Normalization:", detected_role)
-    return detected_role
-
-def validate_resume_data(data):
-    """Validate and clean extracted resume data"""
-    return {
-        "name": data["name"] if data["name"] else "Unknown",
-        "email": data["email"] if data["email"] else "Not found",
-        "phone": data["phone"] if data["phone"] else "Not found",
-        "skills": ", ".join(data["skills"]) if data["skills"] else "Not specified",
-        "job_role": data["job_role"] if data["job_role"] else "Unknown"
-    }
-
-def parse_resume(resume_text):
-    """Run all parsers and validate extracted resume data"""
-    extracted_data = {
-        "name": extract_name(resume_text),
+    structured_data = {
+        "name": extract_name(filepath),
         "email": extract_email(resume_text),
         "phone": extract_phone(resume_text),
         "skills": extract_skills(resume_text),
-        "job_role": extract_job_role(resume_text)
+        "job_role": extract_job_role(resume_text),
     }
-    return validate_resume_data(extracted_data)
+
+    print(f"DEBUG: Extracted Data:\n{structured_data}")  # ✅ Log structured data
+
+    return structured_data
+
+
+# def extract_text(filepath, file_ext):
+#     """Extracts structured text from PDFs and DOCX files."""
+#     if file_ext == "pdf":
+#         return extract_text_from_pdf(filepath)
+#     elif file_ext == "docx":
+#         return extract_text_from_docx(filepath)
+#     return ""

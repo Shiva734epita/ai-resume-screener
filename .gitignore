@@ -1,1 +1,24 @@
 venv/
+# macOS system files
+.DS_Store
+
+# Environment variables (if you do not wish to commit your .env file)
+.env
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Node modules (if applicable)
+node_modules/
+ai-resume-frontend/node_modules/
+
+# Log files
+*.log
+
+# Database dump or other large temporary files
+dump.rdb
+
+# Other directories you don’t want to track (e.g., migrations cache, logs, etc.)
+logs/
+uploads/.DS_Store
