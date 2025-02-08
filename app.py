@@ -1,28 +1,10 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text  # ✅ Import this
+from app import create_app
+from app.celery_worker import celery
 
-# Initialize Flask App
-app = Flask(__name__)
+app = create_app()
 
-# Load Configurations
-app.config.from_object("app.config.Config")
+# Bind Celery to Flask app context
+app.app_context().push()
 
-# Initialize Database
-db = SQLAlchemy(app)
-
-# Test Connection
-with app.app_context():
-    try:
-        db.session.execute(text("SELECT 1"))  # ✅ Wrap SQL query with text()
-        print("✅ SQLAlchemy is connected to PostgreSQL!")
-    except Exception as e:
-        print(f"❌ Database connection failed: {e}")
-
-# Define a Simple Route
-@app.route("/")
-def home():
-    return "🚀 AI Resume Screener is Running!"
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5006)
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5006)

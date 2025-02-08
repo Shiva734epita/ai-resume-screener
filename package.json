@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@radix-ui/react-dialog": "^1.1.6",
+    "@shadcn/ui": "^0.0.4",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.1.0",
+    "npx": "^10.2.2",
+    "react-icons": "^5.4.0"
+  }
+}

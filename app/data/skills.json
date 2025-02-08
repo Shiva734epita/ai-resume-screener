@@ -1,0 +1,8 @@
+{
+    "Programming": ["Python", "Java", "C++", "JavaScript", "Go", "Rust"],
+    "Web Development": ["HTML", "CSS", "JavaScript", "React", "Angular", "Vue"],
+    "Cloud": ["AWS", "Azure", "GCP", "Docker", "Kubernetes"],
+    "AI/ML": ["Machine Learning", "Deep Learning", "TensorFlow", "PyTorch", "NLP"],
+    "Databases": ["SQL", "PostgreSQL", "MongoDB", "Redis", "Cassandra"],
+    "Security": ["Cybersecurity", "Ethical Hacking", "Penetration Testing", "Encryption"]
+}
